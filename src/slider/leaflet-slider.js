@@ -1,3 +1,4 @@
+/* https://github.com/Eclipse1979/leaflet-slider */
 module.exports =  L.Control.extend({
     update: function(value){
         return value;

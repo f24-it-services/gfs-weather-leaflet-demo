@@ -1,0 +1,17 @@
+{
+  "serverURI": "http://localhost:8080",
+  "layers": [{
+    "type": "uvgrd",
+    "surface": "10 m above ground",
+    "label": "Wind"
+  }, {
+    "type": "tmp",
+    "surface": "2 m above ground",
+    "label": "Temperature",
+    "visible": true
+  }, {
+    "type": "prate",
+    "surface": "surface",
+    "label": "Precipitation"
+  }]
+}

@@ -1,2 +1,6 @@
-build/
+build/*
+!build/index.html
+!build/style.css
 node_modules/
+lib/
+src/config.json

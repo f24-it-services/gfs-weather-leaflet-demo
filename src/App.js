@@ -1,49 +1,50 @@
-import React, {Component} from 'react'
-
+import React, {Component, PropTypes} from 'react'
 import request from 'superagent'
-import Pbf from 'Pbf'
-request.parse['application/x-protobuf'] = (buffer) => new Pbf(buffer)
-
-import ColorScale from './ColorScale'
-import GFSLayer from './GFSLayer'
+import Pbf from 'pbf'
+import {ColorScale, GFSLayer} from 'gfs-weather-leaflet'
 
 let L = require('leaflet')
 L.Control.Slider = require('./slider/leaflet-slider.js')
 
-export default class App extends Component {
-  constructor (props, context) {
-    super(props, context)
+request.parse['application/x-protobuf'] = (buffer) => new Pbf(buffer)
 
-    this.onClick = this.onClick.bind(this)
-    this.state = {
-      layers: {
-        uvgrd: new GFSLayer('uvgrd', new ColorScale(5, [0, 17], [4, 9])),
-        tmp: new GFSLayer('tmp', new ColorScale(300, [300, 340], [5, 6], [2, 4, 0])),
-        prate: new GFSLayer('prate', new ColorScale(1e-4, [0, 1e-2], [3, 5], [2, 0, 4]))
-      }
-    }
+export default class App extends Component {
+  static propTypes = {
+    config: PropTypes.shape({
+      serverURI: PropTypes.string.isRequired,
+      layers: PropTypes.arrayOf(PropTypes.shape({
+        type: PropTypes.string.isRequired,
+        surface: PropTypes.string.isRequired
+      })).isRequired
+    }).isRequired
   }
 
   onClick (e) {
-    console.log(e)
+    if (!this.map) {
+      return
+    }
 
     let layers = []
     let time
 
-    Object.keys(this.state.layers).forEach((key) => {
-      if (this.map.hasLayer(this.state.layers[key])) {
-        time = this.state.layers[key].getCurrentDate().getTime()
-        layers.push(key)
+    this.map.eachLayer((layer) => {
+      if (layer instanceof GFSLayer) {
+        time = layer.getCurrentDate().getTime()
+        layers.push(`${layer.options.type}@${layer.options.surface}`)
       }
     })
 
-    if (layers.length < 1) return
+    if (layers.length < 1) {
+      return
+    }
 
     request
-    .get(`http://localhost:9080/forecast/${layers.join(',')}/${time}`)
+    .get(`${this.props.config.serverURI}/forecast`)
     .query({
       lat: e.latlng.lat,
-      lng: e.latlng.lng
+      lng: e.latlng.lng,
+      from: time,
+      layers: layers
     })
     .end((err, res) => {
       console.log(err, res.body)
@@ -54,18 +55,39 @@ export default class App extends Component {
     this.map = L.map('map', {
       maxZoom: 14
     })
-    this.map.setView([53.74871079689897, -24.257812500000004], 4)
-    this.map.on('click', this.onClick)
+    this.map.setView([62, 179], 5)
+    this.map.on('click', this.onClick.bind(this))
 
     L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
     })
     .addTo(this.map)
 
+    let today = new Date(new Date().setUTCHours(0, 0, 0, 0))
+    let layers = {}
+    this.props.config.layers.forEach((layer) => {
+      layers[layer.label] = new GFSLayer({
+        type: layer.type,
+        surface: layer.surface,
+        colorScale: ColorScale[layer.type],
+        baseUrl: this.props.config.serverURI,
+        date: today,
+        forecast: 0
+      })
+
+      if (layer.visible) {
+        layers[layer.label].addTo(this.map)
+      }
+    })
+
+    L.control.layers({}, layers).addTo(this.map)
+
     new L.Control.Slider((value) => {
-      this.state.layers.uvgrd.setForecast(value)
-      this.state.layers.tmp.setForecast(value)
-      this.state.layers.prate.setForecast(value)
+      this.map.eachLayer((layer) => {
+        if (layer instanceof GFSLayer) {
+          layer.setForecast(value)
+        }
+      })
     }, {
       width: '200px',
       position: 'bottomleft',
@@ -77,21 +99,9 @@ export default class App extends Component {
       value: 0,
       step: 3
     }).addTo(this.map)
-
-    L.control.layers({}, {
-      Wind: this.state.layers.uvgrd.addTo(this.map),
-      Temperature: this.state.layers.tmp,
-      Precipitation: this.state.layers.prate
-    })
-    .addTo(this.map)
   }
 
   render () {
-    return (
-      <div>
-        <div id='map' style={{width: 600, height: 500}} />
-        {}
-      </div>
-    )
+    return <div id='map' />
   }
 }
